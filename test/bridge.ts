@@ -11,17 +11,19 @@ describe(contractName, function () {
     // Chains IDs:
     // Rinkeby 4,
     // Binance Smart Chain Testnet 97
-    const eth = 4
-    const bsc = 97
+    // let eth = 4
+    // let bsc = 97
+    let toChainId = 97
+    let fromChainId = 4
     const amount = 13
     const backendAddress = '0x14791697260E4c9A71f18484C9f997B308e59325'
 
-    function getFlatSign(seq: any) {
+    function getFlatSign(seq: any, toChainId: any, fromChainId: any) {
         let privateKey = '0x0123456789012345678901234567890123456789012345678901234567890123'
         let wallet = new ethers.Wallet(privateKey)
-        let message  = ethers.utils.arrayify( ethers.utils.solidityKeccak256(
+        let message = ethers.utils.arrayify(ethers.utils.solidityKeccak256(
             ["uint", "address", "address", "uint", "uint8", "uint8"],
-            [seq, acc1.address, acc2.address, amount, eth, bsc]
+            [seq, acc1.address, acc2.address, amount, toChainId, fromChainId]
         ));
 
         return wallet.signMessage(message);
@@ -35,7 +37,7 @@ describe(contractName, function () {
         contractUsdc = await factory.deploy();
 
         factory = await ethers.getContractFactory(contractName, acc1)
-        contractBridge = await factory.deploy(contractUsdc.address, backendAddress, eth, bsc);
+        contractBridge = await factory.deploy(contractUsdc.address, backendAddress, fromChainId, toChainId);
 
         contractUsdc.grantRole(ethers.utils.keccak256(ethers.utils.toUtf8Bytes('MINTER_ROLE')), contractBridge.address)
         await contractUsdc.approve(contractBridge.address, amount)
@@ -61,29 +63,33 @@ describe(contractName, function () {
         })
 
         it("Should be Event about swap", async function () {
-            await expect(contractBridge.swap(amount, acc2.address)).to.be.to.emit(contractBridge, "swapInitialized").withArgs(acc1.address, acc2.address, amount, eth, bsc)
+            await expect(contractBridge.swap(amount, acc2.address)).to.be.to.emit(contractBridge, "swapInitialized").withArgs(acc1.address, acc2.address, amount, fromChainId, toChainId)
         })
     })
     describe("redeem method", function () {
         it("If signature is success tokens should be minted to sender", async function () {
+
             let balance = await contractUsdc.balanceOf(acc2.address)
-            await contractBridge.redeem(1, acc1.address, acc2.address, amount, eth, bsc, getFlatSign(1))
+            await contractBridge.redeem(1, acc1.address, acc2.address, amount, toChainId, fromChainId, getFlatSign(1, toChainId, fromChainId))
 
             expect(await contractUsdc.balanceOf(acc2.address)).to.be.equal(balance + amount)
         })
         it("If signature is success totalSupply will be changed", async function () {
             let totalSupply = await contractUsdc.totalSupply()
-            await contractBridge.redeem(1, acc1.address, acc2.address, amount, eth, bsc, getFlatSign(1))
+            await contractBridge.redeem(1, acc1.address, acc2.address, amount, toChainId, fromChainId, getFlatSign(1, toChainId, fromChainId))
 
             expect(await contractUsdc.totalSupply()).to.be.equal(totalSupply.add(amount))
         })
         it("Should be reverted if user try mint twice", async function () {
-            await contractBridge.redeem(1, acc1.address, acc2.address, amount, eth, bsc, getFlatSign(1))
+            await contractBridge.redeem(1, acc1.address, acc2.address, amount, toChainId, fromChainId, getFlatSign(1, toChainId, fromChainId))
 
-            await expect(contractBridge.redeem(1, acc1.address, acc2.address, amount, eth, bsc, getFlatSign(1))).to.be.revertedWith("This swap already done")
+            await expect(contractBridge.redeem(1, acc1.address, acc2.address, amount, toChainId, fromChainId, getFlatSign(1, toChainId, fromChainId))).to.be.revertedWith("This swap already done")
         })
         it("Should be reverted if bad signature", async function () {
-            await expect(contractBridge.redeem(1, acc1.address, acc2.address, amount, eth, bsc, getFlatSign(2))).to.be.revertedWith("The signed is broken")
+            await expect(contractBridge.redeem(1, acc1.address, acc2.address, amount, toChainId, fromChainId, getFlatSign(2, toChainId, fromChainId))).to.be.revertedWith("The signed is broken")
+        })
+        it("Should be reverted if bad chain", async function () {
+            await expect(contractBridge.redeem(1, acc1.address, acc2.address, amount, fromChainId, toChainId, getFlatSign(1, fromChainId, toChainId))).to.be.revertedWith("Wrong chain")
         })
     })
 

@@ -47,6 +47,7 @@ contract Bridge {
 
         require(signed_address == _backendAddress, "The signed is broken");
         require(messages[message] == false, "This swap already done");
+        require(_fromChainId == toChainId && _toChainId == fromChainId, "Wrong chain");
 
         messages[message] = true;
         _token.mint(toAddress, amount);
